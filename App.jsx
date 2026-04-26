@@ -1,0 +1,528 @@
+import { useState } from "react";
+
+// ─── Constants ────────────────────────────────────────────────────────────────
+
+const COURTS = [
+  { id: 1,     name: "Quadra 1",   duration: 90, color: "#C8A96E", exclusive: false, description: "Quadra Principal" },
+  { id: "wgf", name: "Quadra WGF", duration: 60, color: "#7FB069", exclusive: false, description: "Quadra WGF" },
+  { id: 3,     name: "Quadra 3",   duration: 60, color: "#5B8DB8", exclusive: false, description: "Quadra Central" },
+  { id: 4,     name: "Quadra 4",   duration: 60, color: "#C0392B", exclusive: true,  description: "Quadra Prof. Emílio", exclusiveNote: "Exclusiva para aulas do Prof. Emílio" },
+];
+
+const SLOTS_START = 7;
+const SLOTS_END   = 22;
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function generateTimeSlots(durationMinutes) {
+  const slots = [];
+  let h = SLOTS_START, m = 0;
+  while (h < SLOTS_END) {
+    slots.push(`${String(h).padStart(2,"0")}:${String(m).padStart(2,"0")}`);
+    m += durationMinutes;
+    if (m >= 60) { h += Math.floor(m / 60); m = m % 60; }
+  }
+  return slots;
+}
+
+function addMinutes(timeStr, mins) {
+  const [h, m] = timeStr.split(":").map(Number);
+  const total = h * 60 + m + mins;
+  return `${String(Math.floor(total / 60)).padStart(2,"0")}:${String(total % 60).padStart(2,"0")}`;
+}
+
+const today       = new Date();
+const formatDate  = (d) => d.toISOString().split("T")[0];
+const displayDate = (s) => { const [y,mo,d] = s.split("-"); return `${d}/${mo}/${y}`; };
+
+// ─── Styles ───────────────────────────────────────────────────────────────────
+
+const S = {
+  root: { minHeight: "100vh", background: "#0f1117", color: "#e8e0d4", fontFamily: "'Georgia','Times New Roman',serif", position: "relative", overflowX: "hidden" },
+  bg:   { position: "fixed", inset: 0, background: "radial-gradient(ellipse 80% 60% at 20% 0%,rgba(200,169,110,.07) 0%,transparent 60%),radial-gradient(ellipse 60% 40% at 80% 100%,rgba(127,176,105,.05) 0%,transparent 60%)", pointerEvents: "none", zIndex: 0 },
+
+  authWrap: { minHeight: "100vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 24, position: "relative", zIndex: 1 },
+  authCard: { width: "100%", maxWidth: 400, background: "#16181f", border: "1px solid #2a2a2a", borderRadius: 18, padding: 36 },
+  authLogo: { textAlign: "center", marginBottom: 28 },
+  authIcon: { fontSize: 42 },
+  authTitle:{ fontSize: 20, fontWeight: "bold", letterSpacing: "0.14em", color: "#C8A96E", marginTop: 10 },
+  authSub:  { fontSize: 10, letterSpacing: "0.2em", color: "#666", marginTop: 4 },
+  authTabs: { display: "flex", background: "#1e2028", borderRadius: 10, padding: 4, marginBottom: 24, gap: 4 },
+  authTab:  { flex: 1, padding: "9px 0", border: "none", borderRadius: 7, background: "transparent", color: "#888", cursor: "pointer", fontFamily: "inherit", fontSize: 13, letterSpacing: "0.06em", transition: "all .2s" },
+  authTabA: { background: "#C8A96E", color: "#0f1117", fontWeight: "bold" },
+  formGroup:{ marginBottom: 16 },
+  label:    { display: "block", fontSize: 11, color: "#888", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 6 },
+  input:    { width: "100%", background: "#1e2028", border: "1px solid #2e2e2e", borderRadius: 8, color: "#e8e0d4", padding: "11px 13px", fontFamily: "inherit", fontSize: 14, outline: "none", boxSizing: "border-box", transition: "border .2s" },
+  authBtn:  { width: "100%", padding: "13px", border: "none", borderRadius: 8, background: "#C8A96E", color: "#0f1117", fontFamily: "inherit", fontSize: 14, letterSpacing: "0.1em", fontWeight: "bold", cursor: "pointer", marginTop: 6 },
+  authErr:  { background: "rgba(192,57,43,.15)", border: "1px solid rgba(192,57,43,.4)", borderRadius: 8, color: "#e74c3c", fontSize: 13, padding: "10px 14px", marginBottom: 16 },
+
+  header:      { position: "sticky", top: 0, zIndex: 100, background: "rgba(15,17,23,.95)", backdropFilter: "blur(12px)", borderBottom: "1px solid rgba(200,169,110,.2)" },
+  headerInner: { maxWidth: 1100, margin: "0 auto", padding: "14px 20px", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 10 },
+  logo:        { display: "flex", alignItems: "center", gap: 10 },
+  logoIcon:    { fontSize: 28 },
+  logoTitle:   { fontSize: 16, fontWeight: "bold", letterSpacing: "0.12em", color: "#C8A96E" },
+  logoSub:     { fontSize: 10, letterSpacing: "0.2em", color: "#666", textTransform: "uppercase" },
+  headerRight: { display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" },
+  userChip:    { background: "rgba(200,169,110,.12)", border: "1px solid rgba(200,169,110,.25)", borderRadius: 20, padding: "5px 14px", fontSize: 12, color: "#C8A96E", letterSpacing: "0.04em" },
+  logoutBtn:   { background: "transparent", border: "1px solid #333", color: "#888", borderRadius: 6, padding: "6px 12px", cursor: "pointer", fontFamily: "inherit", fontSize: 12 },
+  nav:         { display: "flex", gap: 6 },
+  navBtn:      { background: "transparent", border: "1px solid #2a2a2a", color: "#aaa", padding: "7px 16px", borderRadius: 6, cursor: "pointer", fontFamily: "inherit", fontSize: 12, letterSpacing: "0.06em", transition: "all .2s", display: "flex", alignItems: "center", gap: 5 },
+  navBtnA:     { background: "#C8A96E", borderColor: "#C8A96E", color: "#0f1117", fontWeight: "bold" },
+  badge:       { background: "#C0392B", color: "#fff", borderRadius: 10, padding: "1px 6px", fontSize: 10, fontWeight: "bold" },
+
+  main:        { maxWidth: 1100, margin: "0 auto", padding: "24px 20px 60px", position: "relative", zIndex: 1 },
+
+  dateScroll:  { display: "flex", gap: 8, overflowX: "auto", paddingBottom: 8, marginBottom: 28 },
+  dateBtn:     { minWidth: 58, background: "rgba(255,255,255,.04)", border: "1px solid #2a2a2a", borderRadius: 10, color: "#aaa", padding: "9px 6px", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 3, fontFamily: "inherit", transition: "all .2s", flexShrink: 0 },
+  dateBtnA:    { background: "#C8A96E", borderColor: "#C8A96E", color: "#0f1117" },
+  dateBtnDay:  { fontSize: 9, letterSpacing: "0.1em" },
+  dateBtnNum:  { fontSize: 17, fontWeight: "bold" },
+
+  courtsGrid:  { display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(240px,1fr))", gap: 18 },
+  courtCard:   { background: "rgba(255,255,255,.03)", border: "1px solid #222", borderRadius: 14, overflow: "hidden" },
+  courtHeader: { padding: "14px 16px 12px", display: "flex", justifyContent: "space-between", alignItems: "flex-start", background: "rgba(0,0,0,.3)", borderBottom: "1px solid #1e1e1e" },
+  courtName:   { fontSize: 15, fontWeight: "bold", color: "#e8e0d4", letterSpacing: "0.04em" },
+  courtDesc:   { fontSize: 10, color: "#666", marginTop: 2 },
+  tag:         { fontSize: 10, background: "rgba(255,255,255,.07)", color: "#aaa", padding: "3px 8px", borderRadius: 20, letterSpacing: "0.04em" },
+  slotsGrid:   { padding: 10, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 5, maxHeight: 310, overflowY: "auto" },
+  slot:        { border: "1px solid #2a2a2a", borderRadius: 7, padding: "7px 6px", cursor: "pointer", fontFamily: "inherit", display: "flex", flexDirection: "column", alignItems: "center", gap: 2, transition: "all .15s" },
+  slotFree:    { background: "rgba(255,255,255,.04)", color: "#ccc" },
+  slotBooked:  { background: "rgba(255,255,255,.02)", borderWidth: 2, cursor: "default" },
+  slotTime:    { fontSize: 11, fontWeight: "bold", letterSpacing: "0.05em" },
+  slotName:    { fontSize: 9, fontWeight: "bold", letterSpacing: "0.03em" },
+
+  sectionTitle:{ fontSize: 20, color: "#C8A96E", letterSpacing: "0.1em", marginBottom: 18, fontWeight: "normal" },
+  empty:       { textAlign: "center", color: "#666", padding: "56px 0", fontSize: 15, lineHeight: 2 },
+  resList:     { display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(290px,1fr))", gap: 14 },
+  resCard:     { background: "rgba(255,255,255,.03)", border: "1px solid #222", borderRadius: 12, padding: 16 },
+  resTop:      { display: "flex", alignItems: "center", gap: 8, marginBottom: 10 },
+  resCourtTag: { fontSize: 10, padding: "3px 10px", borderRadius: 20, fontWeight: "bold", letterSpacing: "0.06em" },
+  resDate:     { fontSize: 11, color: "#888", marginLeft: "auto" },
+  cancelBtn:   { background: "transparent", border: "1px solid #333", color: "#888", borderRadius: 6, width: 26, height: 26, cursor: "pointer", fontSize: 11, display: "flex", alignItems: "center", justifyContent: "center" },
+  resTime:     { fontSize: 19, fontWeight: "bold", color: "#e8e0d4", letterSpacing: "0.04em", marginBottom: 10 },
+  resPlayers:  { display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" },
+  resPlayer:   { fontSize: 12, color: "#ccc" },
+  resVs:       { fontSize: 11, color: "#555", fontStyle: "italic", letterSpacing: "0.1em" },
+
+  membersList: { display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(220px,1fr))", gap: 12 },
+  memberCard:  { background: "rgba(255,255,255,.03)", border: "1px solid #222", borderRadius: 10, padding: "14px 16px", display: "flex", alignItems: "center", gap: 12 },
+  memberAvatar:{ width: 40, height: 40, borderRadius: "50%", background: "#C8A96E22", border: "2px solid #C8A96E44", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, flexShrink: 0, fontWeight: "bold", color: "#C8A96E" },
+  memberInfo:  { flex: 1, minWidth: 0 },
+  memberName:  { fontSize: 13, fontWeight: "bold", color: "#e8e0d4", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" },
+  memberEmail: { fontSize: 10, color: "#666", marginTop: 2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" },
+  memberSince: { fontSize: 9, color: "#444", marginTop: 3 },
+
+  overlay:     { position: "fixed", inset: 0, background: "rgba(0,0,0,.78)", zIndex: 200, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 },
+  modal:       { background: "#16181f", border: "1px solid #2a2a2a", borderRadius: 16, padding: 26, width: "100%", maxWidth: 420 },
+  modalHdr:    { display: "flex", justifyContent: "space-between", alignItems: "center", paddingBottom: 13, marginBottom: 16 },
+  modalTitle:  { fontSize: 19, color: "#C8A96E", letterSpacing: "0.06em" },
+  closeBtn:    { background: "transparent", border: "none", color: "#666", fontSize: 18, cursor: "pointer" },
+  select:      { width: "100%", background: "#1e2028", border: "1px solid #2e2e2e", borderRadius: 8, color: "#e8e0d4", padding: "10px 12px", fontFamily: "inherit", fontSize: 14, outline: "none", boxSizing: "border-box" },
+  confirmBtn:  { width: "100%", padding: "12px", border: "none", borderRadius: 8, color: "#fff", fontFamily: "inherit", fontSize: 13, letterSpacing: "0.08em", fontWeight: "bold", cursor: "pointer", transition: "opacity .2s" },
+
+  toast:       { position: "fixed", bottom: 24, left: "50%", transform: "translateX(-50%)", color: "#fff", padding: "11px 22px", borderRadius: 30, fontSize: 13, fontWeight: "bold", zIndex: 300, boxShadow: "0 4px 20px rgba(0,0,0,.5)", letterSpacing: "0.04em", whiteSpace: "nowrap" },
+};
+
+// ─── App ──────────────────────────────────────────────────────────────────────
+
+export default function App() {
+  const [members, setMembers]           = useState([]);
+  const [reservations, setReservations] = useState({});
+  const [currentUser, setCurrentUser]   = useState(null);
+
+  const [authTab,  setAuthTab]  = useState("login");
+  const [authForm, setAuthForm] = useState({ name: "", email: "", password: "", confirm: "" });
+  const [authErr,  setAuthErr]  = useState("");
+
+  const [view,         setView]         = useState("courts");
+  const [selectedDate, setSelectedDate] = useState(formatDate(today));
+  const [selectedCourt, setSelectedCourt] = useState(null);
+  const [modal,        setModal]        = useState(null);
+  const [bookForm, setBookForm] = useState({ opponentId: "", opponentName: "", opponentIsGuest: false });
+  const [cancelTarget, setCancelTarget] = useState(null);
+  const [toast, setToast] = useState(null);
+
+  function showToast(msg, type = "success") {
+    setToast({ msg, type });
+    setTimeout(() => setToast(null), 3200);
+  }
+
+  // ── Auth ─────────────────────────────────────────────────────────────────────
+
+  function handleRegister() {
+    setAuthErr("");
+    const { name, email, password, confirm } = authForm;
+    if (!name.trim())   return setAuthErr("Informe seu nome completo.");
+    if (!email.includes("@")) return setAuthErr("E-mail inválido.");
+    if (members.find(m => m.email.toLowerCase() === email.toLowerCase()))
+      return setAuthErr("E-mail já cadastrado.");
+    if (password.length < 4) return setAuthErr("Senha deve ter ao menos 4 caracteres.");
+    if (password !== confirm) return setAuthErr("As senhas não coincidem.");
+    const newMember = { id: Date.now(), name: name.trim(), email: email.trim().toLowerCase(), password, since: formatDate(today) };
+    setMembers(prev => [...prev, newMember]);
+    setCurrentUser(newMember);
+    showToast(`Bem-vindo(a), ${newMember.name.split(" ")[0]}! 🎾`);
+  }
+
+  function handleLogin() {
+    setAuthErr("");
+    const { email, password } = authForm;
+    const found = members.find(m => m.email === email.toLowerCase() && m.password === password);
+    if (!found) return setAuthErr("E-mail ou senha incorretos.");
+    setCurrentUser(found);
+    showToast(`Bem-vindo(a) de volta, ${found.name.split(" ")[0]}! 🎾`);
+  }
+
+  function handleLogout() {
+    setCurrentUser(null);
+    setAuthForm({ name: "", email: "", password: "", confirm: "" });
+    setAuthErr("");
+    setView("courts");
+  }
+
+  // ── Booking ───────────────────────────────────────────────────────────────────
+
+  function getKey(courtId, date, slot) { return `${courtId}|${date}|${slot}`; }
+
+  function openBooking(court, slot) {
+    if (court.exclusive || reservations[getKey(court.id, selectedDate, slot)]) return;
+    setSelectedCourt(court);
+    setModal({ slot });
+    setBookForm({ opponentId: "", opponentName: "", opponentIsGuest: false });
+  }
+
+  function confirmBooking() {
+    const { opponentId, opponentName, opponentIsGuest } = bookForm;
+    let opponentDisplay = "";
+    if (opponentIsGuest && opponentName.trim()) {
+      opponentDisplay = `${opponentName.trim()} (Convidado)`;
+    } else if (opponentId) {
+      const found = members.find(m => m.id === Number(opponentId));
+      opponentDisplay = found ? found.name : "";
+    }
+    const key = getKey(selectedCourt.id, selectedDate, modal.slot);
+    setReservations(prev => ({
+      ...prev,
+      [key]: { member: currentUser, opponentDisplay, court: selectedCourt, date: selectedDate, slot: modal.slot, end: addMinutes(modal.slot, selectedCourt.duration) },
+    }));
+    setModal(null);
+    showToast("Reserva confirmada! 🎾");
+  }
+
+  function cancelReservation(key) {
+    setReservations(prev => { const n = { ...prev }; delete n[key]; return n; });
+    setCancelTarget(null);
+    showToast("Reserva cancelada.", "error");
+  }
+
+  const dateOptions = Array.from({ length: 14 }, (_, i) => {
+    const d = new Date(today); d.setDate(today.getDate() + i); return formatDate(d);
+  });
+
+  const allRes = Object.entries(reservations).sort(([,a],[,b]) =>
+    a.date === b.date ? a.slot.localeCompare(b.slot) : a.date.localeCompare(b.date)
+  );
+
+  // ── Auth Screen ───────────────────────────────────────────────────────────────
+
+  if (!currentUser) return (
+    <div style={S.root}>
+      <div style={S.bg} />
+      <div style={S.authWrap}>
+        <div style={S.authCard}>
+          <div style={S.authLogo}>
+            <div style={S.authIcon}>🎾</div>
+            <div style={S.authTitle}>BARRA TENNIS CLUBE</div>
+            <div style={S.authSub}>SISTEMA DE RESERVAS</div>
+          </div>
+
+          <div style={S.authTabs}>
+            {[["login","Entrar"],["register","Cadastrar"]].map(([t,l]) => (
+              <button key={t}
+                style={{ ...S.authTab, ...(authTab === t ? S.authTabA : {}) }}
+                onClick={() => { setAuthTab(t); setAuthErr(""); }}
+              >{l}</button>
+            ))}
+          </div>
+
+          {authErr && <div style={S.authErr}>{authErr}</div>}
+
+          {authTab === "register" && (
+            <div style={S.formGroup}>
+              <label style={S.label}>Nome Completo</label>
+              <input style={S.input} placeholder="Seu nome completo"
+                value={authForm.name} onChange={e => setAuthForm(f => ({ ...f, name: e.target.value }))} />
+            </div>
+          )}
+          <div style={S.formGroup}>
+            <label style={S.label}>E-mail</label>
+            <input style={S.input} type="email" placeholder="seu@email.com"
+              value={authForm.email} onChange={e => setAuthForm(f => ({ ...f, email: e.target.value }))} />
+          </div>
+          <div style={S.formGroup}>
+            <label style={S.label}>Senha</label>
+            <input style={S.input} type="password" placeholder="••••••"
+              value={authForm.password} onChange={e => setAuthForm(f => ({ ...f, password: e.target.value }))} />
+          </div>
+          {authTab === "register" && (
+            <div style={S.formGroup}>
+              <label style={S.label}>Confirmar Senha</label>
+              <input style={S.input} type="password" placeholder="••••••"
+                value={authForm.confirm} onChange={e => setAuthForm(f => ({ ...f, confirm: e.target.value }))} />
+            </div>
+          )}
+
+          <button style={S.authBtn} onClick={authTab === "login" ? handleLogin : handleRegister}>
+            {authTab === "login" ? "ENTRAR" : "CRIAR CONTA"}
+          </button>
+
+          {authTab === "login" && members.length === 0 && (
+            <p style={{ textAlign: "center", color: "#555", fontSize: 12, marginTop: 16 }}>
+              Nenhum sócio cadastrado ainda.{" "}
+              <span style={{ color: "#C8A96E", cursor: "pointer" }} onClick={() => setAuthTab("register")}>
+                Criar conta
+              </span>
+            </p>
+          )}
+        </div>
+      </div>
+      {toast && <div style={{ ...S.toast, background: toast.type === "error" ? "#C0392B" : "#2ecc71" }}>{toast.msg}</div>}
+    </div>
+  );
+
+  // ── App Screen ────────────────────────────────────────────────────────────────
+
+  return (
+    <div style={S.root}>
+      <div style={S.bg} />
+
+      <header style={S.header}>
+        <div style={S.headerInner}>
+          <div style={S.logo}>
+            <span style={S.logoIcon}>🎾</span>
+            <div>
+              <div style={S.logoTitle}>BARRA TENNIS CLUBE</div>
+              <div style={S.logoSub}>Sistema de Reservas</div>
+            </div>
+          </div>
+          <div style={S.headerRight}>
+            <span style={S.userChip}>👤 {currentUser.name.split(" ")[0]} {currentUser.name.split(" ")[1] ? currentUser.name.split(" ")[1][0]+"." : ""}</span>
+            <nav style={S.nav}>
+              {[["courts","Quadras"],["reservations","Reservas"],["members","Sócios"]].map(([v,l]) => (
+                <button key={v}
+                  style={{ ...S.navBtn, ...(view === v ? S.navBtnA : {}) }}
+                  onClick={() => setView(v)}
+                >
+                  {l}
+                  {v === "reservations" && allRes.length > 0 && <span style={S.badge}>{allRes.length}</span>}
+                </button>
+              ))}
+            </nav>
+            <button style={S.logoutBtn} onClick={handleLogout}>Sair</button>
+          </div>
+        </div>
+      </header>
+
+      <main style={S.main}>
+
+        {/* QUADRAS */}
+        {view === "courts" && (
+          <>
+            <div style={S.dateScroll}>
+              {dateOptions.map(d => {
+                const dt = new Date(d + "T12:00:00");
+                const day = dt.toLocaleDateString("pt-BR", { weekday: "short" });
+                return (
+                  <button key={d} style={{ ...S.dateBtn, ...(d === selectedDate ? S.dateBtnA : {}) }} onClick={() => setSelectedDate(d)}>
+                    <span style={S.dateBtnDay}>{day.toUpperCase()}</span>
+                    <span style={S.dateBtnNum}>{dt.getDate()}</span>
+                  </button>
+                );
+              })}
+            </div>
+
+            <div style={S.courtsGrid}>
+              {COURTS.map(court => {
+                const slots = generateTimeSlots(court.duration);
+                return (
+                  <div key={court.id} style={S.courtCard}>
+                    <div style={{ ...S.courtHeader, borderLeft: `4px solid ${court.color}` }}>
+                      <div>
+                        <div style={S.courtName}>{court.name}</div>
+                        <div style={S.courtDesc}>{court.description}</div>
+                      </div>
+                      {court.exclusive
+                        ? <span style={{ ...S.tag, background: court.color+"22", color: court.color }}>🔒 Exclusiva</span>
+                        : <span style={S.tag}>⏱ {court.duration} min</span>
+                      }
+                    </div>
+
+                    {court.exclusive ? (
+                      <div style={{ padding: 24, textAlign: "center" }}>
+                        <div style={{ fontSize: 34, marginBottom: 8 }}>🎓</div>
+                        <div style={{ color: "#e8e0d4", fontWeight: "bold", fontSize: 13 }}>{court.exclusiveNote}</div>
+                        <div style={{ color: "#555", fontSize: 11, marginTop: 5 }}>Agendamento direto com o professor</div>
+                      </div>
+                    ) : (
+                      <div style={S.slotsGrid}>
+                        {slots.map(slot => {
+                          const key = getKey(court.id, selectedDate, slot);
+                          const booked = reservations[key];
+                          return (
+                            <button key={slot}
+                              style={{ ...S.slot, ...(booked ? { ...S.slotBooked, borderColor: court.color } : S.slotFree) }}
+                              onClick={() => !booked && openBooking(court, slot)}
+                              title={booked ? `${booked.member.name} vs ${booked.opponentDisplay || "—"}` : `Reservar ${slot}`}
+                            >
+                              <span style={S.slotTime}>{slot}</span>
+                              {booked && <span style={{ ...S.slotName, color: court.color }}>{booked.member.name.split(" ")[0]}</span>}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </>
+        )}
+
+        {/* RESERVAS */}
+        {view === "reservations" && (
+          <>
+            <h2 style={S.sectionTitle}>Todas as Reservas</h2>
+            {allRes.length === 0 ? (
+              <div style={S.empty}><div style={{ fontSize: 44 }}>🎾</div><div>Nenhuma reserva ainda.</div></div>
+            ) : (
+              <div style={S.resList}>
+                {allRes.map(([key, r]) => (
+                  <div key={key} style={{ ...S.resCard, borderLeft: `4px solid ${r.court.color}` }}>
+                    <div style={S.resTop}>
+                      <span style={{ ...S.resCourtTag, background: r.court.color+"22", color: r.court.color }}>{r.court.name}</span>
+                      <span style={S.resDate}>{displayDate(r.date)}</span>
+                      {r.member.id === currentUser.id && (
+                        <button style={S.cancelBtn} onClick={() => setCancelTarget(key)}>✕</button>
+                      )}
+                    </div>
+                    <div style={S.resTime}>{r.slot} → {r.end}</div>
+                    <div style={S.resPlayers}>
+                      <span style={S.resPlayer}>👤 {r.member.name}</span>
+                      {r.opponentDisplay && (
+                        <>
+                          <span style={S.resVs}>vs</span>
+                          <span style={S.resPlayer}>
+                            {r.opponentDisplay.includes("Convidado") ? "👥" : "👤"} {r.opponentDisplay}
+                          </span>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </>
+        )}
+
+        {/* SÓCIOS */}
+        {view === "members" && (
+          <>
+            <h2 style={S.sectionTitle}>Sócios Cadastrados ({members.length})</h2>
+            {members.length === 0 ? (
+              <div style={S.empty}><div style={{ fontSize: 44 }}>👥</div><div>Nenhum sócio cadastrado.</div></div>
+            ) : (
+              <div style={S.membersList}>
+                {members.map(m => (
+                  <div key={m.id} style={{ ...S.memberCard, ...(m.id === currentUser.id ? { border: "1px solid #C8A96E55", background: "rgba(200,169,110,.05)" } : {}) }}>
+                    <div style={S.memberAvatar}>{m.name[0].toUpperCase()}</div>
+                    <div style={S.memberInfo}>
+                      <div style={S.memberName}>{m.name}{m.id === currentUser.id ? " ⭐" : ""}</div>
+                      <div style={S.memberEmail}>{m.email}</div>
+                      <div style={S.memberSince}>Sócio desde {displayDate(m.since)}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </>
+        )}
+      </main>
+
+      {/* Booking Modal */}
+      {modal && selectedCourt && (
+        <div style={S.overlay} onClick={() => setModal(null)}>
+          <div style={S.modal} onClick={e => e.stopPropagation()}>
+            <div style={{ ...S.modalHdr, borderBottom: `3px solid ${selectedCourt.color}` }}>
+              <div style={S.modalTitle}>Nova Reserva</div>
+              <button style={S.closeBtn} onClick={() => setModal(null)}>✕</button>
+            </div>
+
+            <div style={{ marginBottom: 18 }}>
+              <div style={{ fontSize: 14, fontWeight: "bold", color: "#e8e0d4" }}>{selectedCourt.name}</div>
+              <div style={{ fontSize: 12, color: "#888", marginTop: 3 }}>
+                {modal.slot} → {addMinutes(modal.slot, selectedCourt.duration)} · {displayDate(selectedDate)}
+              </div>
+            </div>
+
+            <div style={S.formGroup}>
+              <label style={S.label}>Sócio Responsável</label>
+              <div style={{ ...S.input, background: "#1a1c22", color: "#C8A96E", cursor: "default", display: "flex", alignItems: "center", gap: 8 }}>
+                <span>👤</span> {currentUser.name}
+              </div>
+            </div>
+
+            <div style={S.formGroup}>
+              <label style={S.label}>Adversário</label>
+              <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
+                <button
+                  style={{ ...S.confirmBtn, flex: 1, background: !bookForm.opponentIsGuest ? selectedCourt.color : "#232530", padding: "9px", fontSize: 12, color: !bookForm.opponentIsGuest ? "#fff" : "#aaa" }}
+                  onClick={() => setBookForm(f => ({ ...f, opponentIsGuest: false, opponentName: "" }))}
+                >Sócio</button>
+                <button
+                  style={{ ...S.confirmBtn, flex: 1, background: bookForm.opponentIsGuest ? "#5B8DB8" : "#232530", padding: "9px", fontSize: 12, color: bookForm.opponentIsGuest ? "#fff" : "#aaa" }}
+                  onClick={() => setBookForm(f => ({ ...f, opponentIsGuest: true, opponentId: "" }))}
+                >Convidado</button>
+              </div>
+
+              {!bookForm.opponentIsGuest ? (
+                <select style={S.select} value={bookForm.opponentId}
+                  onChange={e => setBookForm(f => ({ ...f, opponentId: e.target.value }))}
+                >
+                  <option value="">— Sem adversário / selecione —</option>
+                  {members.filter(m => m.id !== currentUser.id).map(m => (
+                    <option key={m.id} value={m.id}>{m.name}</option>
+                  ))}
+                </select>
+              ) : (
+                <input style={S.input} placeholder="Nome do convidado"
+                  value={bookForm.opponentName}
+                  onChange={e => setBookForm(f => ({ ...f, opponentName: e.target.value }))}
+                />
+              )}
+            </div>
+
+            <button style={{ ...S.confirmBtn, background: selectedCourt.color, marginTop: 4 }} onClick={confirmBooking}>
+              CONFIRMAR RESERVA
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Cancel Modal */}
+      {cancelTarget && (
+        <div style={S.overlay} onClick={() => setCancelTarget(null)}>
+          <div style={S.modal} onClick={e => e.stopPropagation()}>
+            <div style={S.modalTitle}>Cancelar Reserva</div>
+            <p style={{ color: "#aaa", margin: "16px 0 22px", fontSize: 14 }}>Tem certeza que deseja cancelar esta reserva?</p>
+            <div style={{ display: "flex", gap: 10 }}>
+              <button style={{ ...S.confirmBtn, background: "#C0392B", flex: 1 }} onClick={() => cancelReservation(cancelTarget)}>Sim, cancelar</button>
+              <button style={{ ...S.confirmBtn, background: "#2a2a2a", flex: 1 }} onClick={() => setCancelTarget(null)}>Voltar</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {toast && <div style={{ ...S.toast, background: toast.type === "error" ? "#C0392B" : "#2ecc71" }}>{toast.msg}</div>}
+    </div>
+  );
+}
